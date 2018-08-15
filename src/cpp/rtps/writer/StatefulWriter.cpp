@@ -93,6 +93,10 @@ void StatefulWriter::unsent_change_added_to_history(CacheChange_t* change)
 {
     std::lock_guard<std::recursive_mutex> guard(*mp_mutex);
 
+#if HAVE_SECURITY
+    encrypt_cachechange(change);
+#endif
+
     //TODO Think about when set liveliness assertion when writer is asynchronous.
     this->setLivelinessAsserted(true);
 
@@ -446,7 +450,7 @@ bool StatefulWriter::matched_reader_add(const RemoteReaderAttributes& rdata)
 
             ChangeForReader_t changeForReader(*cit);
 
-            if(rp->m_att.endpoint.durabilityKind >= TRANSIENT_LOCAL && this->getAttributes()->durabilityKind == TRANSIENT_LOCAL)
+            if(rp->m_att.endpoint.durabilityKind >= TRANSIENT_LOCAL && this->getAttributes()->durabilityKind >= TRANSIENT_LOCAL)
             {
                 changeForReader.setRelevance(rp->rtps_is_relevant(*cit));
                 if(!rp->rtps_is_relevant(*cit))
@@ -640,7 +644,7 @@ void StatefulWriter::check_acked_status()
     {
         std::lock_guard<std::recursive_mutex> rguard(*(*it)->mp_mutex);
 
-        if((*it)->get_low_mark() < min_low_mark)
+        if(min_low_mark == SequenceNumber_t() || (*it)->get_low_mark() < min_low_mark)
         {
             min_low_mark = (*it)->get_low_mark();
         }

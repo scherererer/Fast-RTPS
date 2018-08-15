@@ -24,6 +24,7 @@
 #include "PropertyPolicy.h"
 #include "../flowcontrol/ThroughputControllerDescriptor.h"
 #include "../../transport/TransportInterface.h"
+#include "../resources/ResourceManagement.h"
 
 #include <memory>
 
@@ -43,9 +44,20 @@ class SimpleEDPAttributes
         bool use_PublicationWriterANDSubscriptionReader;
         //!Default value true.
         bool use_PublicationReaderANDSubscriptionWriter;
+
+#if HAVE_SECURITY
+        bool enable_builtin_secure_publications_writer_and_subscriptions_reader;
+
+        bool enable_builtin_secure_subscriptions_writer_and_publications_reader;
+#endif
+
         SimpleEDPAttributes():
             use_PublicationWriterANDSubscriptionReader(true),
             use_PublicationReaderANDSubscriptionWriter(true)
+#if HAVE_SECURITY
+            , enable_builtin_secure_publications_writer_and_subscriptions_reader(true),
+            enable_builtin_secure_subscriptions_writer_and_publications_reader(true)
+#endif
         {
 
         }
@@ -151,6 +163,12 @@ class BuiltinAttributes{
         //! Initial peers.
         LocatorList_t initialPeersList;
 
+        //! Memory policy for builtin readers
+        MemoryManagementPolicy_t readerHistoryMemoryPolicy;
+
+        //! Memory policy for builtin writers
+        MemoryManagementPolicy_t writerHistoryMemoryPolicy;
+
         BuiltinAttributes()
         {
             use_SIMPLE_RTPSParticipantDiscoveryProtocol = true;
@@ -161,7 +179,8 @@ class BuiltinAttributes{
             leaseDuration.seconds = 500;
             leaseDuration_announcementperiod.seconds = 250;
             use_WriterLivelinessProtocol = true;
-
+            readerHistoryMemoryPolicy = MemoryManagementPolicy_t::PREALLOCATED_MEMORY_MODE;
+            writerHistoryMemoryPolicy = MemoryManagementPolicy_t::PREALLOCATED_MEMORY_MODE;
         };
         virtual ~BuiltinAttributes(){};
         /**

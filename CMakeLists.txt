@@ -17,18 +17,73 @@
 ###############################################################################
 cmake_minimum_required(VERSION 2.8.12)
 
-# Set CMAKE_BUILD_TYPE to Release by default.
-if(DEFINED CMAKE_BUILD_TYPE)
-    set(CMAKE_BUILD_TYPE ${CMAKE_BUILD_TYPE} CACHE STRING
-        "Choose the type of build, options are: None Debug Release RelWithDebInfo MinSizeRel."
-        )
-else()
-    set(CMAKE_BUILD_TYPE Release CACHE STRING
-        "Choose the type of build, options are: None Debug Release RelWithDebInfo MinSizeRel."
-        )
+set(IS_TOP_LEVEL TRUE)
+if(PROJECT_SOURCE_DIR)
+    set(IS_TOP_LEVEL FALSE)
 endif()
 
-project("fastrtps")
+# Set CMAKE_BUILD_TYPE to Release by default.
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+    message(STATUS "Setting build type to 'Release' as none was specified.")
+    set(CMAKE_BUILD_TYPE Release CACHE STRING
+        "Choose the type of build, options are: None Debug Release RelWithDebInfo MinSizeRel."
+        FORCE)
+    set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release" "MinSizeRel" "RelWithDebInfo")
+endif()
+
+###############################################################################
+# Version information                                                         #
+###############################################################################
+
+#If not set, copy over product version from configure.ac
+file(STRINGS
+    configure.ac
+    LIB_MAJOR_VERSION_TMP
+    REGEX "^m4_define\\(\\[?version_major\\]?, *\\[?[0-9]+\\]?\\)"
+    )
+file(STRINGS
+    configure.ac
+    LIB_MINOR_VERSION_TMP
+    REGEX "^m4_define\\(\\[?version_minor\\]?, *\\[?[0-9]+\\]?\\)"
+    )
+file(STRINGS
+    configure.ac
+    LIB_PATCH_VERSION_TMP
+    REGEX "^m4_define\\(\\[?version_micro\\]?, *\\[?[0-9]+\\]?\\)"
+    )
+
+string(REGEX REPLACE "m4_define\\(\\[?version_major\\]?, *\\[?([0-9]+)\\]?\\)"
+    "\\1"
+    LIB_MAJOR_VERSION
+    ${LIB_MAJOR_VERSION_TMP}
+    )
+string(REGEX REPLACE "m4_define\\(\\[?version_minor\\]?, *\\[?([0-9]+)\\]?\\)"
+    "\\1"
+    LIB_MINOR_VERSION
+    ${LIB_MINOR_VERSION_TMP}
+    )
+string(REGEX REPLACE "m4_define\\(\\[?version_micro\\]?, *\\[?([0-9]+)\\]?\\)"
+    "\\1"
+    LIB_PATCH_VERSION
+    ${LIB_PATCH_VERSION_TMP}
+    )
+
+set(LIB_VERSION_STR "${LIB_MAJOR_VERSION}.${LIB_MINOR_VERSION}.${LIB_PATCH_VERSION}")
+
+###############################################################################
+# Project                                                                     #
+###############################################################################
+if(CMAKE_VERSION VERSION_LESS 3.0)
+    project(fastrtps C CXX)
+    set(PROJECT_VERSION_MAJOR "${LIB_MAJOR_VERSION}")
+    set(PROJECT_VERSION_MINOR "${LIB_MINOR_VERSION}")
+    set(PROJECT_VERSION_PATCH "${LIB_PATCH_VERSION}")
+    set(PROJECT_VERSION "${LIB_VERSION_STR}")
+else()
+    cmake_policy(SET CMP0048 NEW)
+    project(fastrtps VERSION "${LIB_VERSION_STR}" LANGUAGES C CXX)
+endif()
+
 set(PROJECT_NAME_STYLED "FastRTPS")
 set(PROJECT_NAME_LARGE "Fast RTPS")
 string(TOUPPER "${PROJECT_NAME}" PROJECT_NAME_UPPER)
@@ -36,58 +91,13 @@ set(${PROJECT_NAME}_DESCRIPTION_SUMMARY "C++ library implementation of RTPS prot
 set(${PROJECT_NAME}_DESCRIPTION "eProsima ${PROJECT_NAME_LARGE} library provides publication/subscription communication using RTPS protocol.")
 
 message(STATUS "Configuring ${PROJECT_NAME_LARGE}")
-
-###############################################################################
-# Version information                                                         #
-###############################################################################
-
-#If not set, copy over product version from configure.ac
-if(NOT PROJECT_MAJOR_VERSION)
-    file(STRINGS
-        ${PROJECT_SOURCE_DIR}/configure.ac
-        PROJECT_MAJOR_VERSION_TMP
-        REGEX "^m4_define\\(\\[?version_major\\]?, *\\[?[0-9]+\\]?\\)"
-        )
-    file(STRINGS
-        ${PROJECT_SOURCE_DIR}/configure.ac
-        PROJECT_MINOR_VERSION_TMP
-        REGEX "^m4_define\\(\\[?version_minor\\]?, *\\[?[0-9]+\\]?\\)"
-        )
-    file(STRINGS
-        ${PROJECT_SOURCE_DIR}/configure.ac
-        PROJECT_MICRO_VERSION_TMP
-        REGEX "^m4_define\\(\\[?version_micro\\]?, *\\[?[0-9]+\\]?\\)"
-        )
-
-    string(REGEX REPLACE "m4_define\\(\\[?version_major\\]?, *\\[?([0-9]+)\\]?\\)"
-        "\\1"
-        PROJECT_MAJOR_VERSION
-        ${PROJECT_MAJOR_VERSION_TMP}
-        )
-    string(REGEX REPLACE "m4_define\\(\\[?version_minor\\]?, *\\[?([0-9]+)\\]?\\)"
-        "\\1"
-        PROJECT_MINOR_VERSION
-        ${PROJECT_MINOR_VERSION_TMP}
-        )
-    string(REGEX REPLACE "m4_define\\(\\[?version_micro\\]?, *\\[?([0-9]+)\\]?\\)"
-        "\\1"
-        PROJECT_MICRO_VERSION
-        ${PROJECT_MICRO_VERSION_TMP}
-        )
-endif()
-
-set(PROJECT_VERSION ${PROJECT_MAJOR_VERSION}.${PROJECT_MINOR_VERSION}.${PROJECT_MICRO_VERSION})
-
 message(STATUS "Version: ${PROJECT_VERSION}")
 message(STATUS "To change de version modify the file configure.ac")
 
 ###############################################################################
 # Generation of windows installers.
 ###############################################################################
-if(WIN32)
-    option(EPROSIMA_INSTALLER "Activate the creation of a build to create windows installers" OFF)
-    option(EPROSIMA_INSTALLER_MINION "Informs this is part of an installer" OFF)
-endif()
+option(EPROSIMA_INSTALLER "Activate the creation of a build to create windows installers" OFF)
 
 ###############################################################################
 # Warning level
@@ -103,7 +113,12 @@ if(MSVC OR MSVC_IDE)
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${EPROSIMA_EXTRA_CMAKE_CXX_FLAGS}")
     endif()
 else()
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -pedantic -Wextra -Wno-unknown-pragmas -std=c++11")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -pedantic -Wextra -Wno-unknown-pragmas")
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,--no-undefined")
+    elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,-undefined,error")
+    endif()
 endif()
 
 ###############################################################################
@@ -118,7 +133,7 @@ endif()
 ###############################################################################
 # Test system configuration
 ###############################################################################
-include(${PROJECT_SOURCE_DIR}/cmake/dev/check_configuration.cmake)
+include(${PROJECT_SOURCE_DIR}/cmake/common/check_configuration.cmake)
 check_stdcxx()
 check_compile_feature()
 check_endianness()
@@ -143,7 +158,7 @@ else()
     set(DOC_DIR "${DATA_INSTALL_DIR}/doc")
 endif()
 set(DOC_INSTALL_DIR ${DOC_DIR} CACHE PATH "Installation directory for documentation")
-if(WIN32)
+if(WIN32 AND EPROSIMA_INSTALLER AND IS_TOP_LEVEL)
     set(LICENSE_INSTALL_DIR . CACHE PATH "Installation directory for licenses")
 else()
     set(LICENSE_INSTALL_DIR ${DATA_INSTALL_DIR}/${PROJECT_NAME} CACHE PATH "Installation directory for licenses")
@@ -153,7 +168,6 @@ endif()
 # eProsima build options
 ###############################################################################
 option(EPROSIMA_BUILD "Activate internal building" OFF)
-option(MINION "Tells if it is a subproject of a superproject" OFF)
 
 if(EPROSIMA_INSTALLER)
     set(EPROSIMA_BUILD ON)
@@ -186,20 +200,14 @@ option(BUILD_SHARED_LIBS "Create shared libraries by default" ON)
 ###############################################################################
 # Load external projects.
 ###############################################################################
-option(THIRDPARTY "Activate the use of internal thirdparties" OFF)
+include(${PROJECT_SOURCE_DIR}/cmake/common/eprosima_libraries.cmake)
 
-if(EPROSIMA_BUILD)
-    set(THIRDPARTY ON)
-endif()
-
-include(${PROJECT_SOURCE_DIR}/cmake/dev/eprosima_libraries.cmake)
-
-find_eprosima_package(fastcdr)
-find_eprosima_thirdparty(Asio asio)
-find_eprosima_thirdparty(TinyXML2 tinyxml2)
+eprosima_find_package(fastcdr REQUIRED)
+eprosima_find_thirdparty(Asio asio)
+eprosima_find_thirdparty(TinyXML2 tinyxml2)
 
 if(ANDROID)
-    find_eprosima_thirdparty(android-ifaddrs android-ifaddrs)
+    eprosima_find_thirdparty(android-ifaddrs android-ifaddrs)
 endif()
 
 ###############################################################################
@@ -247,7 +255,7 @@ endif()
 ###############################################################################
 # Testing
 ###############################################################################
-if(EPROSIMA_BUILD_TESTS AND NOT EPROSIMA_INSTALLER AND NOT EPROSIMA_INSTALLER_MINION)
+if(EPROSIMA_BUILD_TESTS AND IS_TOP_LEVEL AND NOT EPROSIMA_INSTALLER)
     file(TO_CMAKE_PATH "${PROJECT_SOURCE_DIR}/valgrind.supp" MEMORYCHECK_SUPPRESSIONS_FILE)
     enable_testing()
     include(CTest)
@@ -264,7 +272,7 @@ add_subdirectory(test/performance)
 ###############################################################################
 option(COMPILE_EXAMPLES "Build example" OFF)
 
-if(EPROSIMA_BUILD)
+if(EPROSIMA_BUILD AND IS_TOP_LEVEL AND NOT EPROSIMA_INSTALLER AND NOT EPROSIMA_INSTALLER_MINION)
     set(COMPILE_EXAMPLES ON)
 endif()
 
@@ -362,9 +370,6 @@ endif()
 ###############################################################################
 # Packaging
 ###############################################################################
-# Install external eprosima libraries
-install_eprosima_libraries()
-
 # Install licenses
 install(FILES ${PROJECT_SOURCE_DIR}/LICENSE
     DESTINATION ${LICENSE_INSTALL_DIR}
@@ -372,17 +377,23 @@ install(FILES ${PROJECT_SOURCE_DIR}/LICENSE
     )
 set(CPACK_COMPONENT_LICENSES_HIDDEN 1)
 
-# Install examples
-install(DIRECTORY ${PROJECT_SOURCE_DIR}/examples/C++
-    DESTINATION examples/
-    COMPONENT examples
-    PATTERN "examples/CMakeLists.txt" EXCLUDE
-    )
+set(CPACK_COMPONENTS_ALL headers licenses)
 
-set(CPACK_COMPONENT_EXAMPLES_DISPLAY_NAME "Examples")
-set(CPACK_COMPONENT_EXAMPLES_DESCRIPTION "eProsima ${PROJECT_NAME_LARGE} examples")
+option(INSTALL_EXAMPLES "Install example" ON)
 
-set(CPACK_COMPONENTS_ALL headers licenses examples)
+if(INSTALL_EXAMPLES)
+  # Install examples
+  install(DIRECTORY ${PROJECT_SOURCE_DIR}/examples/C++
+      DESTINATION examples/
+      COMPONENT examples
+      PATTERN "examples/CMakeLists.txt" EXCLUDE
+      )
+
+  set(CPACK_COMPONENT_EXAMPLES_DISPLAY_NAME "Examples")
+  set(CPACK_COMPONENT_EXAMPLES_DESCRIPTION "eProsima ${PROJECT_NAME_LARGE} examples")
+
+  set(CPACK_COMPONENTS_ALL ${CPACK_COMPONENTS_ALL} examples)
+endif()
 
 if(BUILD_JAVA)
     install(FILES ${PROJECT_SOURCE_DIR}/${PROJECT_NAME}gen/share/fastrtps/${PROJECT_NAME}gen.jar
